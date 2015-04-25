@@ -1,0 +1,106 @@
+---
+title: "MLProject"
+output: html_document
+---
+
+Let's see if we can find a model for predicitng if the exercise is being done correctly..
+
+First load the data and strip any zero values, and any values that aren't contributing:
+```{r}
+library(ggplot2);
+library(caret)
+library(plyr)
+library(rattle)
+library(doMC)
+registerDoMC()
+set.seed(1234)
+src_test <- read.csv("/Users/aaronbrady1/ocw/data_science/machine_learning/project/data/pml-testing.csv", header = TRUE)
+src_train <- read.csv("/Users/aaronbrady1/ocw/data_science/machine_learning/project/data/pml-training.csv", header = TRUE);
+# strip NA columns out
+na_cols <- colSums(is.na(src_train))
+src_train <- src_train[,na_cols == 0]
+src_test <- src_test[,na_cols == 0]
+na_cols <- colSums(is.na(src_test))
+src_train <- src_train[,na_cols == 0]
+src_test <- src_test[,na_cols == 0]
+
+# we don't need the id or name or timestamps
+removeCols <- function(names) {
+  src_train <<- src_train[,!(c(names(src_train) %in% names))]
+  src_test <<- src_test[,!(c(names(src_test) %in% names))]
+}
+removeCols(grep('timestamp',colnames(src_test), value=T))
+removeCols(c('X', 'user_name', 'new_window', 'num_window'))
+
+# how we doing for near zero values?
+print(nearZeroVar(src_train));
+```
+Okay, we've gotten rid of all superficially unimportant data, and nearZeroVar came up with nothing, so good!.
+
+Now that we have the data we want, create the partitions:
+```{r}
+set.seed(1234)
+inTrain <- createDataPartition(src_train$classe, p = .8, list=FALSE)
+training <- src_train[inTrain,]; testing <- src_train[-inTrain,]
+```
+
+First up, let's try a rpart tree because they are easy to understand and print nicely:
+```{r}
+set.seed(1234)
+rpartFit <- train(classe~.,method='rpart',data=training);
+print(rpartFit$finalModel);
+fancyRpartPlot(rpartFit$finalModel)
+rpartPred <- predict(rpartFit, newdata=testing)
+summary(rpartPred)
+confusionMatrix(rpartPred,testing$classe)
+```
+
+Ugh, rpart is not very good. 57% accurate. let's try boosting to get some key features:
+```{r}
+set.seed(1234);
+gbmFit <- train(classe ~ ., method="gbm",data=training,verbose=FALSE)
+summary(gbmFit)
+gbmPred <- predict(gbmFit, newdata=testing)
+summary(gbmPred)
+confusionMatrix(gbmPred,testing$classe)
+```
+Okay, 97% accurate on the test set. not too bad. Looking at this data though, there are quite a few columns that don't contribute anything, let's get rid of those.
+
+```{r}
+removeCols(c('total_accel_belt','gyros_belt_x','accel_belt_x','accel_belt_y','pitch_arm'))
+removeCols(c('total_accel_arm','gyros_arm_x','gyros_arm_z','pitch_dumbbell','yaw_dumbbell'))
+removeCols(c('yaw_forearm','gyros_forearm_x','gyros_forearm_y'));
+
+# re-grab the traing/testing data with columns removed
+training <- src_train[inTrain,]; testing <- src_train[-inTrain,]
+```
+
+Let's try a random forest with 3 part cross-validating resampling
+```{r}
+rfFit <- train(classe~.,method='rf',data=training, trControl = trainControl(method="cv",number=3));
+rfPred <- predict(rfFit,newdata = testing);
+summary(rfFit)
+rfPred <- predict(rfFit, newdata=testing)
+summary(rfPred)
+confusionMatrix(rfPred,testing$classe)
+```
+99% accurate. pretty good!
+
+Random forest with our removed features seems good, let's apply it to our test data. this is just for the assignment:
+```{r, echo=FALSE}
+rfPred <- predict(rfFit, newdata=src_test)
+summary(rfPred)
+
+setwd('/Users/aaronbrady1/ocw/data_science/machine_learning/project')
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    print(filename);
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+#pml_write_files(rfPred)
+```
+
+Result: every assignment answer predicted correctly, yay!
