@@ -6,7 +6,7 @@ dataset <- as.data.frame(Seatbelts)
 
 fluidPage(
   
-  titlePanel("Speed and Stopping Distance of Cars Explorer"),
+  titlePanel("Driver Safety in UK And The Effect of Seatbelt Laws"),
   
   sidebarPanel(
     
@@ -15,7 +15,8 @@ fluidPage(
     
     selectInput('x', 'X', names(dataset)),
     selectInput('y', 'Y', names(dataset), names(dataset)[[2]]),
-    selectInput('color', 'Color', c('None', names(dataset)))
+    selectInput('color', 'Color', c('None', names(dataset)), selected='law')
+    ))    
   ),
   
   mainPanel(
