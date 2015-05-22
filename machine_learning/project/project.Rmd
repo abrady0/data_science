@@ -34,6 +34,11 @@ removeCols(c('X', 'user_name', 'new_window', 'num_window'))
 
 # how we doing for near zero values?
 print(nearZeroVar(src_train));
+
+# how about principal component analysis?
+pr_comps <- prcomp(src_train[,-53])
+summary(pr_comps)
+# hmm, not sure what to do with this? chop off the last dozen or so? also tough to interpret, skip it. 
 ```
 Okay, we've gotten rid of all superficially unimportant data, and nearZeroVar came up with nothing, so good!.
 

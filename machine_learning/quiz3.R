@@ -37,8 +37,8 @@ fancyRpartPlot(rpartFit$finalModel)
 # out-of-sample (test set) accuracy smaller or bigger. Is K large or small in leave one out cross
 # validation?
 
-# ans: The bias is larger and the variance is smaller. Under leave one out cross validation K is equal to two.
-
+# nope! The bias is larger and the variance is smaller. Under leave one out cross validation K is equal to two.
+# ans: The bias is larger and the variance is smaller. Under leave one out cross validation K is equal to the sample size.
 ###############
 # Q3
 # These data contain information on 572 different Italian olive oils from multiple regions in Italy.
@@ -78,6 +78,25 @@ testSA = SAheart[-train,]
 
 set.seed(13234)
 missClass = function(values,prediction){sum(((prediction > 0.5)*1) != values)/length(values)}
-glmTrain <- train()
-# What is the misclassification rate on the training set? What is the misclassification rate on the
-# test set?
+glmFit <- train(chd~age+alcohol+obesity+tobacco+typea+ldl,method='glm',family='binomial',data=trainSA)
+summary(glmTrain)
+missClass(trainSA$chd, predict(glmFit, newdata=trainSA)) # .273
+missClass(testSA$chd, predict(glmFit, newdata=testSA))   # .312
+
+
+# Q5
+library(ElemStatLearn)
+data(vowel.train)
+data(vowel.test) 
+
+# Set the variable y to be a factor variable in both the training and test set. Then set the seed to 33833. 
+# Fit a random forest predictor relating the factor variable y to the remaining variables. Read about variable 
+# importance in random forests here: http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr The caret 
+# package uses by defualt the Gini importance. Calculate the variable importance using the varImp function in the caret package. 
+# What is the order of variable importance?
+
+vowel.train$y <- as.factor(vowel.train$y)
+vowel.test$y <- as.factor(vowel.test$y)
+set.seed(33833);
+rf <- train(y~.,method = "rf", data=vowel.train) # ,importance = TRUE,
+varImp(rf) # 2 1 5 6 8 4 9 7 3 10
