@@ -5,18 +5,122 @@ date: "July 16, 2015"
 output: html_document
 ---
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+This document explores a way for people to type more quickly on devices such as mobile phones by predicting what the next word in a sequence will be.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+In summary it looks ngram frequency will be effective for predicting words and that, given how the vast majority of one and two grams occur very infrequently (below the mean) we could save memory by filtering these low frequency hits out and instead build three or four gram tables with a smaller subset of the data to build a more effective model.
 
-```{r}
-summary(cars)
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE,error=FALSE}
+setwd('~/ocw/data_science/dsscapstone');
+library(data.table)
+library(ggplot2)
+oneGram <- fread('oneGramFreqDT.RData')
+twoGram <- fread('twoGramFreqDT.RData')
+oneGram <- oneGram[order(-freq)]
+twoGram <- twoGram[order(-freq)]
 ```
 
-You can also embed plots, for example:
+The source data for this project comes from three files:
+* './data/en_US/en_US.twitter.txt' : a set of twitter posts with:
+** 2360148 lines
+** 30374206 words
+* './data/en_US/en_US.blogs.txt': a set of blog posts with:
+** 899288 lines
+** 37334690 words
+* './data/en_US/en_US.news.txt': a set of news posts with
+** 1010242 lines
+** 34272720 words
 
-```{r, echo=FALSE}
-plot(cars)
+The first thing we want to do is figure out how to cull some of the data in this dataset without affecting the validitt of our model.
+
+If you look at the data one thing becomes clear pretty quickly:
+```{r, echo=T}
+uniqueToks <- oneGram[freq==1,]$tok
+length(uniqueToks)
+uniqueByStartingLetter <- oneGram[freq==1,sum(freq),by=list(substring(tok,1,1))]
+ggplot(uniqueByStartingLetter, aes(x=factor(substring),y=V1)) + geom_bar(stat='identity')
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Looks like we have 566,969 unique tokens, even plotting by starting character there is no particular pattern that I can see, I think we can safely get rid of these.
+```{r, echo=T}
+oneGram <- oneGram[freq>1]
+ggplot(oneGram[1:20], aes(x=factor(tok),y=freq)) + geom_bar(stat='identity')
+```
+
+But maybe we can cull further, let's examine the mean and median:
+```{r,echo=TRUE}
+nrow(oneGram)
+oneGramMean <- mean(oneGram$freq)
+oneGramMean
+nrow(oneGram[freq<oneGramMean])/nrow(oneGram)
+oneGramMedian <- median(oneGram$freq)
+oneGramMedian
+```
+
+93% of the rows in this dataset are below the mean in frequency, indicating a strong skew towards the first words in this list and that this data is not a normal distribution. Our median word frequency is 4, pretty low. Something between the mean and the median seems like a starting place for filtering 1-grams out as, given no other information, it seems like they would just never be suggested.  
+
+Now let's look at the word pairs
+```{r, echo=T}
+uniqueTwoGrams <- twoGram[freq==1]
+nrow(uniqueTwoGrams)/nrow(twoGram)
+```
+
+75% of our word pairs are individual events.
+
+```{r, echo=T}
+twoGram <- twoGram[freq>1]
+nrow(twoGram)
+twoGramMean <- mean(twoGram$freq)
+nrow(twoGram[freq<twoGramMean])/nrow(twoGram)
+median(twoGram$freq)
+ggplot(twoGram[1:10], aes(x=factor(paste(tok0,tok1)),y=freq)) + geom_bar(stat='identity')
+```
+
+For the two word grams, 85% of the pairs are below the mean, and the median has a frequency of 3. It seems that for word pairs, the starting word frequency has an impact on how we can filter it, for example the word 'acknowledge' is the starting word of 196 pairs. the pair('acknowledge', 'wrongful') occurs twice, we can probably cull that.
+
+```{r, echo=TRUE}
+nrow(twoGram[tok0 == 'acknowledge'])
+mean(twoGram[tok0 == 'acknowledge']$freq)
+median(twoGram[tok0 == 'acknowledge']$freq)
+nrow(twoGram[tok0 == 'acknowledge' & freq > 3])
+nrow(twoGram[tok0 == 'acknowledge' & freq > 2])
+```
+
+Mean frequency of 3.2, If we employed a strategy of culling words above the mean we'd reduce the number of pairs from 196 to 46, and 84 for greater than the median.
+
+One thing to be careful of is a strange starting word like 'zz':
+```{r, echo=F}
+oneGram[tok == 'zz']
+nrow(twoGram[tok0 == 'zz'])
+mean(twoGram[tok0 == 'zz']$freq)
+median(twoGram[tok0 == 'zz']$freq)
+zzTwoGrams <- twoGram[tok0 == 'zz'];
+ggplot(zzTwoGrams, aes(x=factor(tok1),y=freq)) + geom_bar(stat='identity')
+```
+
+'zz' as a single word has frequency 86, and 52 times that it shows up it is followed by 'top'. Our strategy of filtering words below the mean would work here, as we'd kep 'top'.
+
+An algorithm for predicting a word to type seems like it could use this data effectively simply by looking at word frequency and suggesting a mix of high frequency words, and high frequency pairs of words. For example, in an empty sentence a person types the letter 'n':
+```{r, echo=TRUE}
+oneGram[tok %like% '^n']
+```
+'new', 'now', and 'need' would be shown, given that there is no other context.
+
+If a person chose 'new', then we could use the twoGram table to look up potential matches:
+```{r, echo=TRUE}
+twoGram[tok0 == 'new']
+```
+
+The person typing might then choose 'york', we can use the twoGram again to look this up:
+```{r, echo=TRUE}
+twoGram[tok0 == 'york']
+```
+
+And the person might type 'times'.
+
+Of course, the person typing might just have meant 'new york', so we need to balance the number of occurances of longer and longer phrases with the chance that people are really typing a phrase that long. 
+
+The plan for this project is to see how we can use the probabilities of words, pairs of words (and possibly longer chains) to drive our prediction model (i.e. a backoff model, see https://en.wikipedia.org/wiki/Katz%27s_back-off_model):
+- step 1 is to build a prediction model that supports backing off multiple levels
+- step 2 is to build a way to test the accuracy of this model by taking either new text or dividing up the existing test and training on one set of data and testing on another.
+- step 3 is to iterate on the model and decide if new approaches are needed (i.e. perhaps looking for infrequent words anywhere previously in the text to help select different word probabilities)
