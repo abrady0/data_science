@@ -61,6 +61,7 @@ toksToFreqs <- function(toks, nGramFreqs) {
 }
 
 saveNgramEnv <- function(env, filename) {
+  print(paste('converting env to',filename));
   #header <- paste(lapply(1:n,function(i) paste('"tok',i,'"',sep='')),collapse=' ')
   #paste(header,'"freq"')
   lines <- c()
@@ -84,23 +85,26 @@ saveNgramEnv <- function(env, filename) {
         freq <- elt;
         line <- paste(newtoks,freq)
         #cat(line, file=filename, append=T);
-        lines <- c(lines, line)
-        if (length(lines) > 100) {
+        lines <<- c(lines, line)
+        #print(paste('lines',lines))
+        if (length(lines) > 500) {
           if (!headerWritten) {
             headerWritten <- T
             header <- paste(lapply(1:depth,function(i) paste('"tok',i,'"',sep='')),collapse=' ')
             header <- paste(paste(header,'"freq"'),'\n',sep='')
-            print(paste('writing header', header))
+            #print(paste('writing header', header))
             cat(header, file=filename)
           }
           writeLines(lines)
-          lines <- c()
+          #print('clearing lines')
+          lines <<- c()
         }
       }
     }
   }
   envToLine(env, NULL,1);
-  
+  print(paste('done, num last lines',length(lines)))
+  writeLines(lines)
 }
 
 filterLowFrequencyWords <- function(e) {
@@ -154,21 +158,20 @@ newsNumLines <- 1010242;
 newsFN <- './data/en_US/en_US.news.txt';
 
 print('starting')
-if (!file.exists('gramFreq.RData')) {
-  print('gramFreq not found, re-creating');
-  oneGramFreq <- new.env();
-  twoGramFreq <- new.env();
-  threeGramFreq <- new.env();
-  nGramFreqs <- c(oneGramFreq,twoGramFreq,threeGramFreq);
-  processFile(twitFN, twitNumLines, nGramFreqs);
-  processFile(blogsFN, blogsNumLines, nGramFreqs);
-  processFile(newsFN, newsNumLines, nGramFreqs);
-  print('save freq')
-  save(oneGramFreq,twoGramFreq,file='gramFreq.RData')  
-} else {
-  print('loading gramFreq');
-  load('gramFreq.RData');
+oneGramFreq <- new.env();
+twoGramFreq <- new.env();
+threeGramFreq <- new.env();
+nGramFreqs <- c(oneGramFreq,twoGramFreq,threeGramFreq);
+processFile(twitFN, twitNumLines, nGramFreqs);
+print('testing, uncomment!')
+#processFile(blogsFN, blogsNumLines, nGramFreqs);
+#processFile(newsFN, newsNumLines, nGramFreqs);
+print('save freq');
+for(i in 1:length(nGramFreqs)) {
+  fn <- paste('n',i,'gramFreq.table',sep='');
+  saveNgramEnv(nGramFreqs[[i]], fn);
 }
+#  save(oneGramFreq,twoGramFreq,file='gramFreq.RData')  
 
 if (is.null(oneGramFreq) || is.null(twoGramFreq)) {
   stop('oneGram or twoGram missing');
