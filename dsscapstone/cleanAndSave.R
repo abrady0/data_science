@@ -60,6 +60,49 @@ toksToFreqs <- function(toks, nGramFreqs) {
   nGramFreqs;
 }
 
+saveNgramEnv <- function(env, filename) {
+  #header <- paste(lapply(1:n,function(i) paste('"tok',i,'"',sep='')),collapse=' ')
+  #paste(header,'"freq"')
+  lines <- c()
+  headerWritten <- F
+  writeLines <- function(lines) {
+    cat(lines, file=filename, append=T, sep='\n')
+  }
+  envToLine <- function(env, toks, depth) {
+    tns <- ls(env)
+    for(i in 1:length(tns)) {
+      tok <- tns[[i]]
+      elt <- env[[tok]]
+      if (!is.null(toks)) {
+        newtoks <- paste(toks,tok)
+      } else {
+        newtoks <- tok
+      }
+      if (is.environment(elt)) {
+        envToLine(elt,newtoks, depth+1)
+      } else {
+        freq <- elt;
+        line <- paste(newtoks,freq)
+        #cat(line, file=filename, append=T);
+        lines <- c(lines, line)
+        if (length(lines) > 100) {
+          if (!headerWritten) {
+            headerWritten <- T
+            header <- paste(lapply(1:depth,function(i) paste('"tok',i,'"',sep='')),collapse=' ')
+            header <- paste(paste(header,'"freq"'),'\n',sep='')
+            print(paste('writing header', header))
+            cat(header, file=filename)
+          }
+          writeLines(lines)
+          lines <- c()
+        }
+      }
+    }
+  }
+  envToLine(env, NULL,1);
+  
+}
+
 filterLowFrequencyWords <- function(e) {
   toRemove <- c();
   lapply(ls(e), function(tok) {
