@@ -21,7 +21,7 @@ source('util.R')
 #cl <- makeCluster(detectCores() - 1)
 #registerDoParallel(cl, cores = detectCores() - 1)
 
-toksToFreqs <- function(toks, oneGramFreq, twoGramFreq) {
+toksToFreqs <- function(toks, nGramFreqs) {
   updateCount <- function (env, tok) {
     total <- 0;
     if (!is.null(env[[tok]])) {
@@ -29,18 +29,35 @@ toksToFreqs <- function(toks, oneGramFreq, twoGramFreq) {
     }
     env[[tok]] <- total + 1;
   }
-  for (i in 1:length(toks)) {
-    tok <- toks[[i]];
-    updateCount(oneGramFreq, tok);
-    if (i < length(toks)) {
-      env <- twoGramFreq[[tok]];
-      if (is.null(env)) {
-        env <- twoGramFreq[[tok]] <- new.env();
+  updateCountForNGram <- function(toks, i, n) {
+    env <- nGramFreqs[[n]];
+    if (is.null(env)) {
+      #print(paste('skipping ngram of dimension',n));
+      return();
+    }
+    if (i+n-1 > length(toks)) {
+      return();
+    }
+    # build env chain
+    if (n > 1) {
+      for (j in 1:(n-1)) {
+        tok <- toks[[i+j-1]]
+        if (is.null(env[[tok]])) {
+          env[[tok]] <- new.env();
+        }
+        #print(paste(n,'building env for ',j,'tok',tok));
+        env <- env[[tok]]
       }
-      updateCount(env, toks[[i+1]]);
+    }
+    #print(paste(n,'updating env',n,'with tok',toks[[i+n-1]]))
+    updateCount(env, toks[[i+n-1]]);
+  }
+  for (i in 1:length(toks)) {
+    for (j in 1: length(nGramFreqs)) {
+      updateCountForNGram(toks,i,j);
     }
   }
-  c(oneGramFreq, twoGramFreq);
+  nGramFreqs;
 }
 
 filterLowFrequencyWords <- function(e) {
@@ -62,7 +79,7 @@ filterLowFrequencyWords <- function(e) {
   rm(list=toRemove,envir=e);
 }
 
-processFile <- function(fileName, numLinesInFile, oneGramFreq, twoGramFreq) {
+processFile <- function(fileName, numLinesInFile, nGramEnvs) {
   print(paste('processFile',fileName));
   numLinesToRead <- 20000;
   numProcessed <- 0
@@ -71,7 +88,7 @@ processFile <- function(fileName, numLinesInFile, oneGramFreq, twoGramFreq) {
     lines <- readLines(con, numLinesToRead);
     #lines <- paste(lines,'EOL'); more trouble than worth
     toks <- tokenizeLines(lines, 'en');
-    toksToFreqs(toks, oneGramFreq, twoGramFreq);
+    toksToFreqs(toks, nGramEnvs);
     
     numProcessed <- numProcessed + length(lines);
     print(paste('processed',numProcessed,'of',numLinesInFile,numProcessed/numLinesInFile,'%'));
@@ -98,9 +115,11 @@ if (!file.exists('gramFreq.RData')) {
   print('gramFreq not found, re-creating');
   oneGramFreq <- new.env();
   twoGramFreq <- new.env();
-  processFile(twitFN, twitNumLines, oneGramFreq, twoGramFreq);
-  processFile(blogsFN, blogsNumLines, oneGramFreq, twoGramFreq);
-  processFile(newsFN, newsNumLines, oneGramFreq, twoGramFreq);
+  threeGramFreq <- new.env();
+  nGramFreqs <- c(oneGramFreq,twoGramFreq,threeGramFreq);
+  processFile(twitFN, twitNumLines, nGramFreqs);
+  processFile(blogsFN, blogsNumLines, nGramFreqs);
+  processFile(newsFN, newsNumLines, nGramFreqs);
   print('save freq')
   save(oneGramFreq,twoGramFreq,file='gramFreq.RData')  
 } else {
