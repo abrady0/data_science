@@ -33,7 +33,7 @@ function main(dir, argv) {
   var outdir = argv[3];
   var tupleLength = Number(argv[4]);
   if (argv.length !== 5 || !fn || !outdir) {
-    console.log('invalid: <infile> <tupleLength>',fn,tupleLength); // DONOTCHECKIN
+    console.log('invalid: <infile> <outdir> <tupleLength>',fn,tupleLength); // DONOTCHECKIN
     return;
   }
   if (!fs.existsSync(outdir)) {

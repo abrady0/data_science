@@ -18,7 +18,7 @@ function main(dir, argv) {
   var fn = argv[2];
   var outdir = argv[3];
   if (argv.length !== 4 || !fn || !outdir) {
-    console.log('not enough args: <infile> <outdir> or not args',fn,outdir); // DONOTCHECKIN
+    console.log('not enough args: <infile> <outdir> or not args',argv.length, fn,outdir); // DONOTCHECKIN
     return;
   }
   if (!fs.existsSync(outdir)) {
