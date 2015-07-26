@@ -1,10 +1,14 @@
-# x open connection
-# x read block of lines
-# x tokenize
-# factorize tokens?
-# accumulate frequencies
-# normalize
-# save
+# observation: 
+# - we keep running out of memory trying to build ngrams beyond two, and even one and two grams take forever
+# - reading a datatable in is very fast
+# - data.table lookups are fast as well
+# - adding rows to data.tables is expensive
+
+# because R is slow at hash tables, and because R data.table updates are slow, we should process our data with another
+# language built for this:
+# - R loads and cleans the text lines then writes them out
+# - external process turns the lines into fread-able files of 1,2,3, etc. grams
+# - these files are used for our engine
 
 setwd('~/ocw/data_science/dsscapstone');
 set.seed(1234);
@@ -21,111 +25,6 @@ source('util.R')
 #cl <- makeCluster(detectCores() - 1)
 #registerDoParallel(cl, cores = detectCores() - 1)
 
-toksToFreqs <- function(toks, nGramFreqs) {
-  updateCount <- function (env, tok) {
-    total <- 0;
-    if (!is.null(env[[tok]])) {
-      total <- env[[tok]];
-    }
-    env[[tok]] <- total + 1;
-  }
-  updateCountForNGram <- function(toks, i, n) {
-    env <- nGramFreqs[[n]];
-    if (is.null(env)) {
-      #print(paste('skipping ngram of dimension',n));
-      return();
-    }
-    if (i+n-1 > length(toks)) {
-      return();
-    }
-    # build env chain
-    if (n > 1) {
-      for (j in 1:(n-1)) {
-        tok <- toks[[i+j-1]]
-        if (is.null(env[[tok]])) {
-          env[[tok]] <- new.env();
-        }
-        #print(paste(n,'building env for ',j,'tok',tok));
-        env <- env[[tok]]
-      }
-    }
-    #print(paste(n,'updating env',n,'with tok',toks[[i+n-1]]))
-    updateCount(env, toks[[i+n-1]]);
-  }
-  for (i in 1:length(toks)) {
-    for (j in 1: length(nGramFreqs)) {
-      updateCountForNGram(toks,i,j);
-    }
-  }
-  nGramFreqs;
-}
-
-saveNgramEnv <- function(env, filename) {
-  print(paste('converting env to',filename));
-  #header <- paste(lapply(1:n,function(i) paste('"tok',i,'"',sep='')),collapse=' ')
-  #paste(header,'"freq"')
-  lines <- c()
-  headerWritten <- F
-  writeLines <- function(lines) {
-    cat(lines, file=filename, append=T, sep='\n')
-  }
-  envToLine <- function(env, toks, depth) {
-    tns <- ls(env)
-    for(i in 1:length(tns)) {
-      tok <- tns[[i]]
-      elt <- env[[tok]]
-      if (!is.null(toks)) {
-        newtoks <- paste(toks,tok)
-      } else {
-        newtoks <- tok
-      }
-      if (is.environment(elt)) {
-        envToLine(elt,newtoks, depth+1)
-      } else {
-        freq <- elt;
-        line <- paste(newtoks,freq)
-        #cat(line, file=filename, append=T);
-        lines <<- c(lines, line)
-        #print(paste('lines',lines))
-        if (length(lines) > 500) {
-          if (!headerWritten) {
-            headerWritten <- T
-            header <- paste(lapply(1:depth,function(i) paste('"tok',i,'"',sep='')),collapse=' ')
-            header <- paste(paste(header,'"freq"'),'\n',sep='')
-            #print(paste('writing header', header))
-            cat(header, file=filename)
-          }
-          writeLines(lines)
-          #print('clearing lines')
-          lines <<- c()
-        }
-      }
-    }
-  }
-  envToLine(env, NULL,1);
-  print(paste('done, num last lines',length(lines)))
-  writeLines(lines)
-}
-
-filterLowFrequencyWords <- function(e) {
-  toRemove <- c();
-  lapply(ls(e), function(tok) {
-    elt <- e[[tok]];
-    if (is.environment(elt)) {
-      filterLowFrequencyWords(elt);
-      if (length(ls(elt)) < 5) {
-        toRemove <<- c(toRemove, tok);
-      }
-    } else {
-      if (!is.numeric(elt) || elt < 5) {
-        toRemove <<- c(toRemove, tok);
-      }
-    }
-  })
-  print(paste('removing "',length(toRemove),'words'));
-  rm(list=toRemove,envir=e);
-}
-
 processFile <- function(fileName, numLinesInFile, nGramEnvs) {
   print(paste('processFile',fileName));
   numLinesToRead <- 20000;
@@ -133,7 +32,6 @@ processFile <- function(fileName, numLinesInFile, nGramEnvs) {
   con <- file(fileName,open="r");
   repeat {
     lines <- readLines(con, numLinesToRead);
-    #lines <- paste(lines,'EOL'); more trouble than worth
     toks <- tokenizeLines(lines, 'en');
     toksToFreqs(toks, nGramEnvs);
     
